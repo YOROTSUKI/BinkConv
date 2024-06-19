@@ -1,5 +1,5 @@
 use std::env;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, exit};
 
 fn main() {
@@ -15,32 +15,27 @@ fn main() {
     // 读取文件路径
     let file_path = &args[1];
 
+    // 获取可执行文件所在目录
+    let exe_path = env::current_exe().expect("Failed to get current exe path");
+    let exe_dir = exe_path.parent().expect("Failed to get exe directory");
+
     // 使用 Path 模块获取文件名并替换扩展名
     let path = Path::new(file_path);
-    let avi_input = path.file_stem()
+    let file_stem = path.file_stem()
         .and_then(|name| name.to_str())
-        .unwrap_or("")
-        .to_owned() + ".avi";
-    let avi_output = path.file_stem()
-        .and_then(|name| name.to_str())
-        .unwrap_or("")
-        .to_owned() + ".avi";
-    let output_file_name = path.file_stem()
-        .and_then(|name| name.to_str())
-        .unwrap_or("")
-        .to_owned() + ".mp4";
+        .unwrap_or("");
 
-    // 如果输出文件名为空，退出
-    if output_file_name.is_empty() {
-        eprintln!("Failed to determine output file name.");
-        exit(1);
-    }
+    // 构建输出文件路径
+    let avi_output_path = exe_dir.join(format!("{}.avi", file_stem));
+    let mp4_output_path = exe_dir.join(format!("{}.mp4", file_stem));
 
-    // 调用外部命令 binkvideo64.exe BinkConv <input>
+    // 调用外部命令 binkvideo64.exe BinkConv <input> <avi_output>
     let output = Command::new("C:\\Program Files (x86)\\RADVideo\\radvideo64.exe")
         .arg("BinkConv")
         .arg(file_path)
-        .arg(avi_output)
+        .arg(avi_output_path.to_str().unwrap())
+        .arg("/#")
+        // .arg(">NUL")
         .output()
         .expect("Failed to execute binkvideo64 command");
 
@@ -50,11 +45,11 @@ fn main() {
         let stdout = String::from_utf8_lossy(&output.stdout);
         println!("stdout: {}", stdout);
 
-        // 第二个命令 ffmpeg -y -i <input> -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -vf "pad=ceil(iw/2)*2:ceil(ih/2)*2" <output>
+        // 第二个命令 ffmpeg -y -i <avi_output> -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -vf "pad=ceil(iw/2)*2:ceil(ih/2)*2" <mp4_output>
         let ffmpeg_output = Command::new("ffmpeg")
             .arg("-y")
             .arg("-i")
-            .arg(avi_input)
+            .arg(avi_output_path.to_str().unwrap())
             .arg("-c:v")
             .arg("libx264")
             .arg("-crf")
@@ -65,7 +60,7 @@ fn main() {
             .arg("yuv420p")
             .arg("-vf")
             .arg("pad=ceil(iw/2)*2:ceil(ih/2)*2")
-            .arg(&output_file_name)
+            .arg(mp4_output_path.to_str().unwrap())
             .output()
             .expect("Failed to execute ffmpeg command");
 
